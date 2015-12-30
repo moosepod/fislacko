@@ -1,0 +1,7 @@
+venv
+*.pyc
+**/*.py.swp
+**/*.py.swo
+.vagrant
+local_settings.py
+build/**
