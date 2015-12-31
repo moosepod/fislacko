@@ -22,6 +22,11 @@ def router(game_id):
     data = request.form.get('text','').split(' ')
     userid = request.form.get('user_id')
     username = request.form.get('user_name')
+    
+    return jsonify(route(game_id,data,userid,username,app.config['FIREBASE_URL']))
+
+# Broken out to assist in testing
+def route(game_id,data,userid,username,firebase_url):
     command = None
     params = []
     if data:
@@ -30,13 +35,13 @@ def router(game_id):
             params = data[1:]
     if command:
         # Setup our firebase connection for the request
-        fb = firebase.FirebaseApplication(app.config['FIREBASE_URL'],None)
+        fb = firebase.FirebaseApplication(firebase_url,None)
         game = fb.get('/games',game_id)  
         if not game:
             fb.put('/games',game_id,{'active': True})
-        return jsonify(command(fb,'/games/%s' % game_id,
-                        params,userid,username).to_json())
-    return u"""Usage: /slack command, where commands are:
+        return command(fb,'/games/%s' % game_id,
+                        params,userid,username).to_json()
+    return {'text': u"""Usage: /slack command, where commands are:
 reset_game: reset the game
 pool: roll the dice for the pool
 register [name]: register your player name with the game
@@ -44,7 +49,7 @@ status: request that the current game status be output to the channel
 claim [color number]: claim a die from the pool
 give [color number user]: give a die to another player
 roll: roll all your dice and give the aggregate score
-spend: spend one your dice (so you no longer have it)"""
+spend: spend one your dice (so you no longer have it)"""}
 
 
 if __name__ == '__main__':

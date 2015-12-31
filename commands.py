@@ -49,7 +49,38 @@ def claim(game,path,params,user_id,user_name):
     # Verify die
     # take die
     # Print status
-    return SlackResponse("%s claimed die" % (user_name),True)
+    if len(params) != 2:
+        return SlackResponse("Usage: /fiasco claim color number")
+    
+    # Validate
+    color,number = [x.lower() for x in params]
+    if color not in ('white','black','w','b'):
+        return SlackResponse("Color needs to be white, black, w or b")
+    try:
+        number_int = int(number)
+        if number_int not in (1,2,3,4,5,6):
+            return SlackResponse('Number needs to be 1-6')
+    except ValueError:
+        return SlackResponse('Number needs to be 1-6')
+    
+    # Find die
+    dice = game.get(path,'dice')
+    user_dice = game.get(u'users/%s' % user_id,'dice') or {}
+    if color[0] == 'w':
+        color = 'white'
+    else:
+        color = 'black'
+    if not user_dice.get(color): user_dice['color'] = []
+    for i,d in enumerate(dice.get(color,[])):
+        if str(d) == number:
+            del dice[color][i]
+            game.put(path,'dice',dice)
+            user_dice['color'].append(d)
+            game.put(u'users/user_id','dice',user_dice)
+            return SlackResponse ("%s claimed %s %s" % (user_name, color, d),True)
+
+    return SlackResponse("Could not find a %s %s" % (color, number_int))
+
 
 def give(game,path,params,user_id,user_name):
     """ Give one of your dice to someone else """
@@ -75,13 +106,11 @@ def roll_pool(game,path,params,user_id,user_name):
 numbers=['zero','one','two','three','four','five','six']
 
 def format_dice_pool(dice):
-    return """White:
-%s
-
-Black
-%s
-""" % (''.join([u':%s:' % numbers[x] for x in dice['black']]),
-       ','.join([u':%s:' % numbers[x] for x in dice['white']]))
+    if not dice:
+        return ""
+    return """%s %s
+""" % (' '.join([u':d6-%s:' % x for x in dice.get('white',[])]),
+       ' '.join([u':d6-%s-black:' % x for x in dice.get('black',[])]))
 
 def spend(game,path,params,user_id,user_name):
     """ Let a user spend one of their dice """
