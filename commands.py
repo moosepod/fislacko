@@ -160,11 +160,14 @@ def roll_pool(game,path,params,user_id,user_name):
 numbers=['zero','one','two','three','four','five','six']
 
 def format_dice_pool(dice):
+    """ >>> format_dice_pool(Die(number=5,color='black'),Die(number=1,color='white'),Die(number=6,color='black'))
+        u':d6-5-black: :d6-1: :d6-6-black:'
+    """
     if not dice:
         return ""
-    return """%s %s
-""" % (' '.join([u':d6-%s:' % x for x in dice.get('white',[])]),
-       ' '.join([u':d6-%s-black:' % x for x in dice.get('black',[])]))
+    return u"""%s %s
+""" % (' '.join([x.to_emoji() for x in dice if x.color == 'white'])
+       ' '.join([x.to_emoji() for x in dice if x.color == 'black'])
 
 def spend(game,path,params,user_id,user_name):
     """ Let a user spend one of their dice """
