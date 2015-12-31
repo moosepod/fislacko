@@ -1,10 +1,11 @@
 from flask import Flask,jsonify,request
-from flask_restful import Resource, Api
-import json
+
+from firebase import firebase
+
 import commands
 
 app = Flask(__name__)
-api = Api(app)
+app.config.from_envvar('FISLACKO_SETTINGS')
 
 COMMAND_MAPPINGS = {'reset_game': commands.reset_game,
                     'register': commands.register,
@@ -28,7 +29,13 @@ def router(game_id):
         if len(data) > 1:
             params = data[1:]
     if command:
-        return jsonify(command(params,userid,username).to_json())
+        # Setup our firebase connection for the request
+        fb = firebase.FirebaseApplication(app.config['FIREBASE_URL'],None)
+        game = fb.get('/games',game_id)  
+        if not game:
+            fb.put('/games',game_id,{'active': True})
+        return jsonify(command(fb,'/games/%s' % game_id,
+                        params,userid,username).to_json())
     return u"""Usage: /slack command, where commands are:
 reset_game: reset the game
 pool: roll the dice for the pool
