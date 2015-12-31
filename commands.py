@@ -1,6 +1,7 @@
 """ Contains the commands for the Fiasco/Slack web service
 """
 import random
+import re
 
 class SlackResponse(object):
     def __init__(self,text,in_channel=False):
@@ -12,6 +13,59 @@ class SlackResponse(object):
 
     def to_json(self):
         return {'text': self.text, 'response_type': self.response_type}
+
+class InvalidDie(Exception):
+    pass
+
+class Die(object):
+    DIE_RANGE = (1,2,3,4,5,6)
+    COLORS = ('white','black')
+    RX = re.compile('^([wb]|white|black)\s?(\d)$')
+    def __init__(self,color=None,number=None,json=None,params=None):
+        """ Color is white or black. Number is 1-6. Json expects {'c','n'} 
+        >>> Die(color='white',number=5).to_emoji()
+        u':d6-5:'
+        >>> Die(color='black',number=1).to_emoji()
+        u':d6-1-black:'
+        >>> Die(json={'c':'black','n':'3'}).to_emoji()
+        u':d6-3-black:'
+        >>> Die(params=['w1']).to_emoji()
+        u':d6-1:'
+        >>> Die(params=['b3']).to_emoji()
+        u':d6-3-black:'
+        >>> Die(params=['white 6']).to_emoji()
+        u':d6-6:'
+        >>> Die(params=['black 1']).to_emoji()
+        u':d6-1-black:'
+"""
+        if json:
+            color = json.get('c','no color')
+            number = json.get('n','no number')
+        if params:
+            pt = ' '.join(params)
+            m = Die.RX.match(pt.lower())
+            if not m:
+                raise InvalidDie('Invalid die name %s' % pt)
+            color,number = m.group(1), m.group(2)
+        
+        self.color = color
+        try:
+            self.number = int(number)
+        except ValueError:
+            raise InvalidDie('Invalid number for die: %s' % number)
+        
+        if self.color == 'w': self.color = 'white'
+        if self.color == 'b': self.color = 'black' 
+        if self.number not in Die.DIE_RANGE:
+            raise InvalidDie('Die number %s not in range %s' % (self.number, Die.DIE_RANGE))
+        if self.color not in Die.COLORS:
+            raise InvalidDie('Invalid color %s' % self.color)
+    
+    def to_emoji(self):
+        extra = ''
+        if self.color == 'black':
+            extra = '-black'
+        return u':d6-%d%s:' % (self.number,extra)
 
 def reset_game(game,path,params,user_id,user_name):
     """ Reset the game """
@@ -117,3 +171,9 @@ def spend(game,path,params,user_id,user_name):
     # Take color and number
     # Verify
     return SlackResponse("Spent")
+
+
+if __name__ == "__main__":
+    import doctest
+    doctest.testmod()
+
