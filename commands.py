@@ -18,6 +18,7 @@ class InvalidDie(Exception):
     pass
 
 class Die(object):
+    """ Abstracts a D6 that can be white or black """
     DIE_RANGE = (1,2,3,4,5,6)
     COLORS = ('white','black')
     RX = re.compile('^([wb]|white|black)\s?(\d)$')
@@ -37,6 +38,10 @@ class Die(object):
         u':d6-6:'
         >>> Die(params=['black 1']).to_emoji()
         u':d6-1-black:'
+        >>> Die(params=['w1']).to_json()
+        {'c': 'white', 'n': 1}
+        >>> unicode(Die(params=['b2']))
+        u'black 2'
 """
         if json:
             color = json.get('c','no color')
@@ -61,119 +66,143 @@ class Die(object):
         if self.color not in Die.COLORS:
             raise InvalidDie('Invalid color %s' % self.color)
     
+    def to_json(self):
+        return {'n': self.number,'c': self.color}
+
     def to_emoji(self):
         extra = ''
         if self.color == 'black':
             extra = '-black'
         return u':d6-%d%s:' % (self.number,extra)
 
-def reset_game(game,path,params,user_id,user_name):
-    """ Reset the game """
-    if len(params) == 1 and params[0].lower() == 'yes':
-        game.delete(path,'users')
-        game.delete(path,'dice')
+    def __unicode__(self):
+        return u'%s %s' % (self.color, self.number)
+
+class Game(object):
+    def __init__(self,firebase,path):
+        self.firebase = firebase
+        self.path = path
+    
+    @property
+    def dice(self):
+        return [Die(json=x) for x in self.firebase.get(self.path,'dice') or []]
+
+    @dice.setter
+    def dice(self,value):
+        self.firebase.put(self.path,'dice',[x.to_json() for x in value])
+    
+    @property
+    def users(self):
+        return self.firebase.get(self.path,'users') or {}
+
+    def get_user(self,user_id):
+        return self.firebase.get('%s/users' % self.path, user_id) or {}
+
+    def set_user(self,user_id,slack_name, game_name):
+        self.firebase.put('%s/users' % self.path,user_id, {'name': game_name, 'slack_name': slack_name})
+
+    def set_user_dice(self,user_id,dice):
+        """ Set the dice for a user. Dice should be a list/tuple of Die objects """
+        self.firebase.put('%s/users/%s' % (self.path,user_id), 'dice', [x.to_json() for x in dice])
+
+    def clear(self):
+        """ Clear this game on firebase """
+        self.firebase.delete(self.path,'users')
+        self.firebase.delete(self.path,'dice')
+
+def reset_game(game,params,user_id,user_name):
+    """ Reset the game data """
+    if len(params) == 1 and params[0].lower() == 'confirm':
+        game.clear()
         return SlackResponse('%s has reset the game.' % user_name)
     
     return SlackResponse('To reset, pass in confirm as the parameter')   
 
-def register(game,path,params,user_id,user_name):
+def register(game,params,user_id,user_name):
     """ Register the logged in user as a given character """
     # Take in name
     # Store name
     if not len(params):
         return SlackResponse('Please provide the name you will go by.')
     name = ' '.join(params)
-    game.put('%s/users' % path,user_id,{'name':name,'slack_name': user_name})
+    game.set_user(user_id,user_name,name)
+    
     return SlackResponse('%s is now registered as %s' % (user_name,name),True)
 
-def status(game,path,params,user_id,user_name):
+def status(game,params,user_id,user_name):
     """ Send game status to channel """
     player_a = []
-    users = game.get(path,'users')
+    users = game.users
     for v in users.values():
         player_a.append(u'%s (%s)' % (v['name'],v['slack_name']))
-    return SlackResponse("""Players: %s
+    return SlackResponse("""Players: 
+%s
 
 %s""" % (u"\n".join(player_a),
-               format_dice_pool(game.get(path,'dice'))),True)
+               format_dice_pool(game.dice)),True)
 
-def claim(game,path,params,user_id,user_name):
+def claim(game,params,user_id,user_name):
     """ Claim a specific die """
-    # Take color + number
-    # Verify die
-    # take die
-    # Print status
-    if len(params) != 2:
+    if len(params) < 1:
         return SlackResponse("Usage: /fiasco claim color number")
     
     # Validate
-    color,number = [x.lower() for x in params]
-    if color not in ('white','black','w','b'):
-        return SlackResponse("Color needs to be white, black, w or b")
     try:
-        number_int = int(number)
-        if number_int not in (1,2,3,4,5,6):
-            return SlackResponse('Number needs to be 1-6')
-    except ValueError:
-        return SlackResponse('Number needs to be 1-6')
+        die = Die(params=params)
+    except InvalidDie:
+        return SlackResponse('Format is w5 or white 5 (or b1 or black 1')
     
     # Find die
-    dice = game.get(path,'dice')
-    user_dice = game.get(u'users/%s' % user_id,'dice') or {}
-    if color[0] == 'w':
-        color = 'white'
-    else:
-        color = 'black'
-    if not user_dice.get(color): user_dice['color'] = []
-    for i,d in enumerate(dice.get(color,[])):
-        if str(d) == number:
-            del dice[color][i]
-            game.put(path,'dice',dice)
-            user_dice['color'].append(d)
-            game.put(u'users/user_id','dice',user_dice)
-            return SlackResponse ("%s claimed %s %s" % (user_name, color, d),True)
+    dice = game.dice
+    user_dice = game.get_user(user_id).get('dice',{})
+    for i,d in enumerate(dice):
+        if d.number == die.number and d.color == die.color:
+            del dice[i]
+            game.dice = dice
+            game.set_user_dice(user_id,user_dice)
+            return SlackResponse ("%s claimed %s" % (user_name, die.to_emoji()),True)
 
-    return SlackResponse("Could not find a %s %s" % (color, number_int))
+    return SlackResponse(u"Could not find a %s" % die)
 
-
-def give(game,path,params,user_id,user_name):
+def give(game,params,user_id,user_name):
     """ Give one of your dice to someone else """
-    return SlackResponse("%s gave dice" % (user_name),True)
+    return SlackResponse("Not implemented.")
 
-def roll(game,path,params,user_id,user_name):
+def roll(game,params,user_id,user_name):
     """ Roll a user's dice and show the sum """
-    return SlackRespones("%s rolled: " % user_name,True)
+    return SlackResponse("Not implemented")
 
-def roll_pool(game,path,params,user_id,user_name):
+def roll_pool(game,params,user_id,user_name):
     """ Reroll the central dice pool. Should be two black and two white dice for each user """
-    dice = {'black': [],'white': []}
-    user_count = len(game.get(path,'users'))
-    for l in (dice['black'],dice['white']):
+    dice = []
+    user_count = len(game.users)
+    if not user_count:
+        return SlackResponse("No registered users so no dice rolled. /fiasco register Your Name to register yourself.")
+    for color in ('black','white'):
         for i in range((user_count*2)):
-            l.append(random.randint(1,6))
-    game.put(path,'dice',dice)
+            dice.append(Die(color=color,number=random.randint(1,6)))
+    game.dice = dice
+
     return SlackResponse("""Pool recreated.
 
 %s
 """ % format_dice_pool(dice),True)
 
-numbers=['zero','one','two','three','four','five','six']
-
 def format_dice_pool(dice):
-    """ >>> format_dice_pool(Die(number=5,color='black'),Die(number=1,color='white'),Die(number=6,color='black'))
-        u':d6-5-black: :d6-1: :d6-6-black:'
+    """ 
+>>> format_dice_pool((Die(number=5,color='black'),Die(number=1,color='white'),Die(number=6,color='black')))
+u':d6-1: :d6-5-black: :d6-6-black:'
     """
     if not dice:
         return ""
-    return u"""%s %s
-""" % (' '.join([x.to_emoji() for x in dice if x.color == 'white'])
-       ' '.join([x.to_emoji() for x in dice if x.color == 'black'])
+    return u"%s %s"% (' '.join([x.to_emoji() for x in dice if x.color == 'white']),
+       ' '.join([x.to_emoji() for x in dice if x.color == 'black']))
 
-def spend(game,path,params,user_id,user_name):
+def spend(game,params,user_id,user_name):
     """ Let a user spend one of their dice """
     # Take color and number
     # Verify
-    return SlackResponse("Spent")
+    return SlackResponse("Not implemented.")
 
 
 if __name__ == "__main__":

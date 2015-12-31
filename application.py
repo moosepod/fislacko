@@ -1,3 +1,5 @@
+import logging
+
 from flask import Flask,jsonify,request
 
 from firebase import firebase
@@ -23,7 +25,11 @@ def router(game_id):
     userid = request.form.get('user_id')
     username = request.form.get('user_name')
     
-    return jsonify(route(game_id,data,userid,username,app.config['FIREBASE_URL']))
+    try:   
+        return jsonify(route(game_id,data,userid,username,app.config['FIREBASE_URL']))
+    except Exception, e:
+        logging.error(e)
+        return jsonify({'text': 'Whoops! Error.'})
 
 # Broken out to assist in testing
 def route(game_id,data,userid,username,firebase_url):
@@ -39,7 +45,7 @@ def route(game_id,data,userid,username,firebase_url):
         game = fb.get('/games',game_id)  
         if not game:
             fb.put('/games',game_id,{'active': True})
-        return command(fb,'/games/%s' % game_id,
+        return command(commands.Game(fb,'/games/%s' % game_id),
                         params,userid,username).to_json()
     return {'text': u"""Usage: /slack command, where commands are:
 reset_game: reset the game
