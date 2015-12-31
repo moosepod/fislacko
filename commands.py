@@ -40,7 +40,7 @@ def status(game,path,params,user_id,user_name):
         player_a.append(u'%s (%s)' % (v['name'],v['slack_name']))
     return SlackResponse("""Players: %s
 
-Dice: %s""" % (u"\n".join(player_a),
+%s""" % (u"\n".join(player_a),
                format_dice_pool(game.get(path,'dice'))),True)
 
 def claim(game,path,params,user_id,user_name):
@@ -72,14 +72,16 @@ def roll_pool(game,path,params,user_id,user_name):
 %s
 """ % format_dice_pool(dice),True)
 
+numbers=['zero','one','two','three','four','five','six']
+
 def format_dice_pool(dice):
     return """White:
 %s
 
 Black
 %s
-""" % (','.join([str(x) for x in dice['black']]),
-       ','.join([str(x) for x in dice['white']]))
+""" % (''.join([u':%s:' % numbers[x] for x in dice['black']]),
+       ','.join([u':%s:' % numbers[x] for x in dice['white']]))
 
 def spend(game,path,params,user_id,user_name):
     """ Let a user spend one of their dice """
