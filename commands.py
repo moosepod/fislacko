@@ -17,6 +17,40 @@ class SlackResponse(object):
 class InvalidDie(Exception):
     pass
 
+class MockFirebase(object):
+    def __init__(self,data=None):
+        self.data = data or {}
+
+    def get(self,path,subpath):
+        """ 
+>>> MockFirebase({'foo': {'bar': {'quux': True}}}).get('foo','bar')
+{'quux': True}
+"""
+        d = self.data
+        for part in path.split('/'):
+            d = d.get(part)
+            if not d:
+                return None
+        d = d.get(subpath)
+        return d
+    
+    def put(self,path,subpath,data):
+        """ 
+>>> unicode(MockFirebase().put('foo','bar',{'quux': True}))
+u"{'foo': {'bar': {'quux': True}}}"
+        """ 
+        d = self.data
+        for part in path.split('/'):
+            if not d.get(part):
+                d[part] = {}
+            d = d[part]
+        d[subpath] = data 
+        # Return self to make testing easier
+        return self
+
+    def __unicode__(self):
+        return unicode(self.data)
+
 class Die(object):
     """ Abstracts a D6 that can be white or black """
     DIE_RANGE = (1,2,3,4,5,6)
@@ -98,6 +132,17 @@ class Game(object):
     def get_user(self,user_id):
         return self.firebase.get('%s/users' % self.path, user_id) or {}
 
+    def get_user_by_slack_name(self,slack_name):
+        """ Return the user with the given slack name, or None if no match. Case insensitive 
+>>> Game(MockFirebase({'game': {'users':{'12456': {'name': 'Test', 'slack_name': 'Foo'}}}}),'game').get_user_by_slack_name('bar')
+>>> Game(MockFirebase({'game': {'users':{'12456': {'name': 'Test', 'slack_name': 'Foo'}}}}),'game').get_user_by_slack_name('foo')
+{'slack_name': 'Foo', 'name': 'Test'}
+"""
+        for user in self.users.values():
+            if user.get('slack_name').lower() == slack_name.lower():
+                return user
+        return None
+
     def set_user(self,user_id,slack_name, game_name):
         self.firebase.put('%s/users' % self.path,user_id, {'name': game_name, 'slack_name': slack_name})
 
@@ -109,6 +154,14 @@ class Game(object):
         """ Clear this game on firebase """
         self.firebase.delete(self.path,'users')
         self.firebase.delete(self.path,'dice')
+
+    def take_die_from(self,die,from_user):
+        """ Take the specifed die from the user. Return True if successful, False otherwise """
+        pass
+
+    def give_die_to(self,die,to_user):
+        """ Give the specified die to the provided user. """
+        pass
 
 def reset_game(game,params,user_id,user_name):
     """ Reset the game data """
@@ -166,7 +219,29 @@ def claim(game,params,user_id,user_name):
 
 def give(game,params,user_id,user_name):
     """ Give one of your dice to someone else """
-    return SlackResponse("Not implemented.")
+    if len(params) < 2:
+        return SlackResponse("Usage: /fiasco die slack_name")
+    from_player = game.get_user(user_id)
+    if not from_player:
+        return SlackResponse("You are not registered as a player. Please type /fiasco register your_game_name")
+
+    # Load up our user and desired die
+    slack_name = params[-1]
+    to_player = game.get_user_by_slack_name(slack_name)
+    if not to_player:
+        return SlackResponse('No player found with slack name "%s"' % slack_name)
+
+    try:
+        die = Die(params=params[0:-1])
+    except InvalidDie:
+        return SlackResponse('Format is w5 or white 5 (or b1 or black 1)')
+
+    if not game.take_die_from(from_player,die):
+        return SlackResponse(u'%s does not have a %s' % (slack_name, die))
+
+    game.give_die_to(to_player,die)
+
+    return SlackResponse(u"%s gave %s to %s" % (user_name,die,slack_name))
 
 def roll(game,params,user_id,user_name):
     """ Roll a user's dice and show the sum """
