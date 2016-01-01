@@ -19,12 +19,13 @@ COMMAND_MAPPINGS = {'reset_game': commands.reset_game,
                     'spend': commands.spend}
                     
 
-@app.route('/game/<game_id>/',methods=['POST','GET'])
-def router(game_id):
+@app.route('/fiasco/',methods=['POST','GET'])
+def router():
     data = request.form.get('text','').split(' ')
     userid = request.form.get('user_id')
     username = request.form.get('user_name')
-    
+    game_id = request.form.get('channel_id')
+
     try:   
         return jsonify(route(game_id,data,userid,username,app.config['FIREBASE_URL']))
     except Exception, e:
