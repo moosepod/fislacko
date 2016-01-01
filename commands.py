@@ -133,19 +133,23 @@ class Game(object):
     def get_user(self,user_id):
         return self.firebase.get('%s/users' % self.path, user_id) or {}
 
-    def get_user_by_slack_name(self,slack_name):
+    def get_user_id_for_slack_name(self,slack_name):
         """ Return the user with the given slack name, or None if no match. Case insensitive 
->>> Game(MockFirebase({'game': {'users':{'12456': {'name': 'Test', 'slack_name': 'Foo'}}}}),'game').get_user_by_slack_name('bar')
->>> Game(MockFirebase({'game': {'users':{'12456': {'name': 'Test', 'slack_name': 'Foo'}}}}),'game').get_user_by_slack_name('foo')
-{'slack_name': 'Foo', 'name': 'Test'}
+>>> Game(MockFirebase({'game': {'users':{'12456': {'name': 'Test', 'slack_name': 'Foo'}}}}),'game').get_user_id_for_slack_name('bar')
+>>> Game(MockFirebase({'game': {'users':{'12456': {'name': 'Test', 'slack_name': 'Foo'}}}}),'game').get_user_id_for_slack_name('foo')
+'12456'
 """
-        for user in self.users.values():
+        for user_id,user in self.users.items():
             if user.get('slack_name').lower() == slack_name.lower():
-                return user
+                return user_id
         return None
 
     def set_user(self,user_id,slack_name, game_name):
         self.firebase.put('%s/users' % self.path,user_id, {'name': game_name, 'slack_name': slack_name})
+
+    def get_user_dice(self,user_id):
+        """ Return all dice for a user """
+        return [Die(json=x) for x in self.firebase.get('%s/users/%s' % (self.path,user_id), 'dice')]
 
     def set_user_dice(self,user_id,dice):
         """ Set the dice for a user. Dice should be a list/tuple of Die objects """
@@ -158,24 +162,37 @@ class Game(object):
 
     def take_die_from(self,die,from_user_id):
         """ Take the specifed die from the user with the given id then persist the results. 
-            Return True if successful, False otherwise 
->>> Game(MockFirebase({'game': {'users':{'12456': {'dice': [{'c':'black','n':1}], 'name': 'Test', 'slack_name': 'Foo'}}}}),'game').take_die_from(Die(params=['b1']),'12456').firebase.data
-{'game': {'users': {'12456': {'slack_name': 'Foo', 'dice': [], 'name': 'Test'}}}}
->>> Game(MockFirebase({'game': {'users':{'12456': {'dice': [{'c':'black','n':1}], 'name': 'Test', 'slack_name': 'Foo'}}}}),'game').take_die_from(Die(params=['b1']),'12456none').firebase.data
-{'game': {'users': {'12456': {'slack_name': 'Foo', 'dice': [{'c': 'black', 'n': 1}], 'name': 'Test'}}}}
->>> Game(MockFirebase({'game': {'users':{'12456': {'dice': [{'c':'black','n':1}], 'name': 'Test', 'slack_name': 'Foo'}}}}),'game').take_die_from(Die(params=['w1']),'12456').firebase.data
-{'game': {'users': {'12456': {'slack_name': 'Foo', 'dice': [{'c': 'black', 'n': 1}], 'name': 'Test'}}}}
+>>> Game(MockFirebase({'game': {'users':{'12456': {'dice': [{'c':'black','n':1}], 'name': 'Test', 'slack_name': 'Foo'}}}}),'game').take_die_from(Die(params=['b1']),'12456')
+True
+>>> Game(MockFirebase({'game': {'users':{'12456': {'dice': [{'c':'black','n':1}], 'name': 'Test', 'slack_name': 'Foo'}}}}),'game').take_die_from(Die(params=['b1']),'12456none')
+False
+>>> Game(MockFirebase({'game': {'users':{'12456': {'dice': [{'c':'black','n':1}], 'name': 'Test', 'slack_name': 'Foo'}}}}),'game').take_die_from(Die(params=['w1']),'12456')
+False
 """
         from_user = self.get_user(from_user_id)
         for i,d in enumerate(from_user.get('dice',[])):
             if die.to_json() == d:
                 del from_user['dice'][i]
                 self.set_user_dice(from_user_id,from_user['dice']) 
-        return self
+                return True
+        return False
 
-    def give_die_to(self,die,to_user):
-        """ Give the specified die to the provided user. """
-        pass
+    def give_die_to(self,die,to_user_id):
+        """ Give the specified die to the specified user. 
+>>> Game(MockFirebase({'game': {'users':{'12456': {'dice': [], 'name': 'Test', 'slack_name': 'Foo'}}}}),'game').give_die_to(Die(params=['b1']),'12456')
+True
+>>> Game(MockFirebase({'game': {'users':{'12456': {'dice': [], 'name': 'Test', 'slack_name': 'Foo'}}}}),'game').give_die_to(Die(params=['b1']),'12456none')
+False
+"""
+        to_user = self.get_user(to_user_id)
+        if not to_user:
+            return False
+        if not to_user.get('dice'):
+            to_user['dice'] = []
+        to_user['dice'].append(die)
+        self.set_user_dice(to_user_id,to_user['dice'])
+        return True
+
 
 def reset_game(game,params,user_id,user_name):
     """ Reset the game data """
@@ -200,8 +217,8 @@ def status(game,params,user_id,user_name):
     """ Send game status to channel """
     player_a = []
     users = game.users
-    for v in users.values():
-        player_a.append(u'%s (%s)' % (v['name'],v['slack_name']))
+    for uid,v in users.items():
+        player_a.append(u'%s (%s) %s' % (v['name'],v['slack_name'],format_dice_pool(game.get_user_dice(uid))))
     return SlackResponse("""Players: 
 %s
 
@@ -221,11 +238,12 @@ def claim(game,params,user_id,user_name):
     
     # Find die
     dice = game.dice
-    user_dice = game.get_user(user_id).get('dice',{})
+    user_dice = game.get_user(user_id).get('dice',[])
     for i,d in enumerate(dice):
         if d.number == die.number and d.color == die.color:
             del dice[i]
             game.dice = dice
+            user_dice.append(die)
             game.set_user_dice(user_id,user_dice)
             return SlackResponse ("%s claimed %s" % (user_name, die.to_emoji()),True)
 
@@ -241,8 +259,8 @@ def give(game,params,user_id,user_name):
 
     # Load up our user and desired die
     slack_name = params[-1]
-    to_player = game.get_user_by_slack_name(slack_name)
-    if not to_player:
+    to_player_id = game.get_user_id_for_slack_name(slack_name)
+    if not to_player_id:
         return SlackResponse('No player found with slack name "%s"' % slack_name)
 
     try:
@@ -250,10 +268,10 @@ def give(game,params,user_id,user_name):
     except InvalidDie:
         return SlackResponse('Format is w5 or white 5 (or b1 or black 1)')
 
-    if not game.take_die_from(from_player,die):
+    if not game.take_die_from(die,user_id):
         return SlackResponse(u'%s does not have a %s' % (slack_name, die))
 
-    game.give_die_to(to_player,die)
+    game.give_die_to(die,to_player_id)
 
     return SlackResponse(u"%s gave %s to %s" % (user_name,die,slack_name))
 
