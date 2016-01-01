@@ -9,12 +9,12 @@ import commands
 app = Flask(__name__)
 app.config.from_envvar('FISLACKO_SETTINGS')
 
-COMMAND_MAPPINGS = {'reset_game': commands.reset_game,
+COMMAND_MAPPINGS = {'reset': commands.reset_game,
                     'register': commands.register,
                     'status': commands.status,
                     'claim': commands.claim,
                     'give': commands.give,
-                    'roll_pool': commands.roll_pool,
+                    'pool': commands.pool,
                     'roll': commands.roll,
                     'spend': commands.spend}
                     
@@ -49,12 +49,12 @@ def route(game_id,data,userid,username,firebase_url):
         return command(commands.Game(fb,'/games/%s' % game_id),
                         params,userid,username).to_json()
     return {'text': u"""Usage: /slack command, where commands are:
-reset_game: reset the game
-pool: roll the dice for the pool
+reset [confirm]:  reset the game if "confirm" is passed as the parameter
+pool [roll]: show the current dice pool. if roll passed in as parameter, clear everyones dice and roll the dice for the pool
 register [name]: register your player name with the game
-status: request that the current game status be output to the channel
+status: output current status to channel
 claim [color number]: claim a die from the pool
-give [color number user]: give a die to another player
+give [color number] [user]: give a die to another player
 roll: roll all your dice and give the aggregate score
 spend: spend one your dice (so you no longer have it)"""}
 
