@@ -167,11 +167,11 @@ False
 >>> Game(MockFirebase({'game': {'users':{'12456': {'dice': [{'c':'black','n':1}], 'name': 'Test', 'slack_name': 'Foo'}}}}),'game').take_die_from(Die(params=['w1']),'12456')
 False
 """
-        from_user = self.get_user(from_user_id)
-        for i,d in enumerate(from_user.get('dice',[])):
-            if die.to_json() == d:
-                del from_user['dice'][i]
-                self.set_user_dice(from_user_id,from_user['dice'])
+        dice = self.get_user_dice(from_user_id)
+        for i,d in enumerate(dice):
+            if die.to_json() == d.to_json():
+                del dice[i]
+                self.set_user_dice(from_user_id,dice)
                 return True
         return False
 
@@ -182,11 +182,6 @@ True
 >>> Game(MockFirebase({'game': {'users':{'12456': {'dice': [], 'name': 'Test', 'slack_name': 'Foo'}}}}),'game').give_die_to(Die(params=['b1']),'12456none')
 False
 """
-        to_user = self.get_user(to_user_id)
-        if not to_user:
-            return False
-        if not to_user.get('dice'):
-            to_user['dice'] = []
-        to_user['dice'].append(die)
-        self.set_user_dice(to_user_id,to_user['dice'])
-        return True
+        dice = self.get_user_dice(to_user_id) or []
+        dice.append(die)
+        self.set_user_dice(to_user_id,dice)

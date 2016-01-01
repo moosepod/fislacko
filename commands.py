@@ -72,22 +72,18 @@ def give(game,params,user_id,user_name):
         return SlackResponse("You are not registered as a player. Please type /fiasco register your_game_name")
 
     # Load up our user and desired die
-    slack_name = params[-1]
+    slack_name = params[-1].replace('@','') # Allow use of @
     to_player_id = game.get_user_id_for_slack_name(slack_name)
     if not to_player_id:
         return SlackResponse('No player found with slack name "%s"' % slack_name)
-
     try:
         die = Die(params=params[0:-1])
     except InvalidDie:
         return SlackResponse('Format is w5 or white 5 (or b1 or black 1)')
-
     if not game.take_die_from(die,user_id):
         return SlackResponse(u'%s does not have a %s' % (slack_name, die))
-
     game.give_die_to(die,to_player_id)
-
-    return SlackResponse(u"%s gave %s to %s" % (user_name,die,slack_name))
+    return SlackResponse(u"%s gave %s to %s" % (user_name,die.to_emoji(),slack_name),True)
 
 def roll(game,params,user_id,user_name):
     """ Roll a user's dice and show the sum """
