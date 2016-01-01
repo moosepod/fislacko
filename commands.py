@@ -2,6 +2,7 @@
 """
 import random
 import re
+import logging
 
 class SlackResponse(object):
     def __init__(self,text,in_channel=False):
@@ -155,9 +156,22 @@ class Game(object):
         self.firebase.delete(self.path,'users')
         self.firebase.delete(self.path,'dice')
 
-    def take_die_from(self,die,from_user):
-        """ Take the specifed die from the user. Return True if successful, False otherwise """
-        pass
+    def take_die_from(self,die,from_user_id):
+        """ Take the specifed die from the user with the given id then persist the results. 
+            Return True if successful, False otherwise 
+>>> Game(MockFirebase({'game': {'users':{'12456': {'dice': [{'c':'black','n':1}], 'name': 'Test', 'slack_name': 'Foo'}}}}),'game').take_die_from(Die(params=['b1']),'12456').firebase.data
+{'game': {'users': {'12456': {'slack_name': 'Foo', 'dice': [], 'name': 'Test'}}}}
+>>> Game(MockFirebase({'game': {'users':{'12456': {'dice': [{'c':'black','n':1}], 'name': 'Test', 'slack_name': 'Foo'}}}}),'game').take_die_from(Die(params=['b1']),'12456none').firebase.data
+{'game': {'users': {'12456': {'slack_name': 'Foo', 'dice': [{'c': 'black', 'n': 1}], 'name': 'Test'}}}}
+>>> Game(MockFirebase({'game': {'users':{'12456': {'dice': [{'c':'black','n':1}], 'name': 'Test', 'slack_name': 'Foo'}}}}),'game').take_die_from(Die(params=['w1']),'12456').firebase.data
+{'game': {'users': {'12456': {'slack_name': 'Foo', 'dice': [{'c': 'black', 'n': 1}], 'name': 'Test'}}}}
+"""
+        from_user = self.get_user(from_user_id)
+        for i,d in enumerate(from_user.get('dice',[])):
+            if die.to_json() == d:
+                del from_user['dice'][i]
+                self.set_user_dice(from_user_id,from_user['dice']) 
+        return self
 
     def give_die_to(self,die,to_user):
         """ Give the specified die to the provided user. """
