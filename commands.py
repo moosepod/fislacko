@@ -87,7 +87,15 @@ def give(game,params,user_id,user_name):
 
 def roll(game,params,user_id,user_name):
     """ Roll a user's dice and show the sum """
-    return SlackResponse("Not implemented")
+    dice = game.get_user_dice(user_id)
+    if not dice:
+        return SlackResponse("You have no dice.")
+    dx = sum([x.roll() for x in dice if x.color == 'white']) - sum([x.roll() for x in dice if x.color == 'black'])
+    if dx > 0:
+        return SlackResponse("%s rolled white %d" % (user_name,dx))
+    elif dx < 0:
+        return SlackResponse("%s rolled black %d" % (user_name,abs(dx)))
+    return SlackResponse("%s rolled 0." % (user_name,))   
 
 def pool(game,params,user_id,user_name):
     """ Output the dice pool. If "roll" is the first parameter, reroll. Should be two black and two white dice for each user """
@@ -121,9 +129,19 @@ u':d6-1: :d6-5-black: :d6-6-black:'
 
 def spend(game,params,user_id,user_name):
     """ Let a user spend one of their dice """
-    # Take color and number
-    # Verify
-    return SlackResponse("Not implemented.")
+    dice = game.get_user_dice(user_id)
+    try:
+        die = Die(params=params)
+    except InvalidDie:
+        return SlackResponse('Format is w5 or white 5 (or b1 or black 1)')
+    
+    for i,d in enumerate(dice):
+        if die.to_json() == d.to_json():
+            del dice[i]
+            game.set_user_dice(user_id,dice)
+            return SlackResponse("%s spent %s" % (user_name, die.to_emoji()),True)
+       
+    return SlackResponse("You don't have a %s" % die.to_emoji())
 
 
 if __name__ == "__main__":

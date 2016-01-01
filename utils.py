@@ -98,6 +98,9 @@ class Die(object):
             raise InvalidDie('Die number %s not in range %s' % (self.number, Die.DIE_RANGE))
         if self.color not in Die.COLORS:
             raise InvalidDie('Invalid color %s' % self.color)
+    
+    def roll(self):
+        return random.randint(1,6)
 
     def to_json(self):
         return {'n': self.number,'c': self.color}
