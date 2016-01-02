@@ -21,10 +21,6 @@ class MockFirebase(object):
         self.data = data or {}
 
     def get(self,path,subpath):
-        """
->>> MockFirebase({'foo': {'bar': {'quux': True}}}).get('foo','bar')
-{'quux': True}
-"""
         d = self.data
         for part in path.split('/'):
             d = d.get(part)
@@ -34,18 +30,12 @@ class MockFirebase(object):
         return d
 
     def put(self,path,subpath,data):
-        """
->>> unicode(MockFirebase().put('foo','bar',{'quux': True}))
-u"{'foo': {'bar': {'quux': True}}}"
-        """
         d = self.data
         for part in path.split('/'):
             if not d.get(part):
                 d[part] = {}
             d = d[part]
         d[subpath] = data
-        # Return self to make testing easier
-        return self
 
     def __unicode__(self):
         return unicode(self.data)
@@ -56,26 +46,7 @@ class Die(object):
     COLORS = ('white','black')
     RX = re.compile('^([wb]|white|black)\s?(\d)$')
     def __init__(self,color=None,number=None,json=None,params=None):
-        """ Color is white or black. Number is 1-6. Json expects {'c','n'}
-        >>> Die(color='white',number=5).to_emoji()
-        u':d6-5:'
-        >>> Die(color='black',number=1).to_emoji()
-        u':d6-1-black:'
-        >>> Die(json={'c':'black','n':'3'}).to_emoji()
-        u':d6-3-black:'
-        >>> Die(params=['w1']).to_emoji()
-        u':d6-1:'
-        >>> Die(params=['b3']).to_emoji()
-        u':d6-3-black:'
-        >>> Die(params=['white 6']).to_emoji()
-        u':d6-6:'
-        >>> Die(params=['black 1']).to_emoji()
-        u':d6-1-black:'
-        >>> Die(params=['w1']).to_json()
-        {'c': 'white', 'n': 1}
-        >>> unicode(Die(params=['b2']))
-        u'black 2'
-"""
+        """ Color is white or black. Number is 1-6. Json expects {'c','n'}"""
         if json:
             color = json.get('c','no color')
             number = json.get('n','no number')
@@ -100,7 +71,10 @@ class Die(object):
             raise InvalidDie('Invalid color %s' % self.color)
     
     def roll(self):
-        return random.randint(1,6)
+        """ Roll a number for this die, storing it and returning it """
+        n = random.randint(1,6)
+        self.number =  n
+        return n
 
     def to_json(self):
         return {'n': self.number,'c': self.color}
@@ -119,6 +93,13 @@ class Game(object):
         self.firebase = firebase
         self.path = path
 
+    def format_dice_pool(self,dice):
+        """ Take a list/tuple of dice and return them sorted into white and black dice, as emoji """
+        if not dice:
+            return ""
+        return u"%s %s"% (' '.join([x.to_emoji() for x in dice if x.color == 'white']),
+            ' '.join([x.to_emoji() for x in dice if x.color == 'black']))
+
     @property
     def dice(self):
         return [Die(json=x) for x in self.firebase.get(self.path,'dice') or []]
@@ -135,16 +116,15 @@ class Game(object):
         return self.firebase.get('%s/users' % self.path, user_id) or {}
 
     def get_user_id_for_slack_name(self,slack_name):
-        """ Return the user with the given slack name, or None if no match. Case insensitive
->>> Game(MockFirebase({'game': {'users':{'12456': {'name': 'Test', 'slack_name': 'Foo'}}}}),'game').get_user_id_for_slack_name('bar')
->>> Game(MockFirebase({'game': {'users':{'12456': {'name': 'Test', 'slack_name': 'Foo'}}}}),'game').get_user_id_for_slack_name('foo')
-'12456'
-"""
+        """ Return the user with the given slack name, or None if no match. Case insensitive """
         for user_id,user in self.users.items():
             if user.get('slack_name').lower() == slack_name.lower():
                 return user_id
         return None
 
+    def unregister(self,user_id):
+        self.firebase.delete(u'%s/users' % (self.path,),user_id)
+        
     def set_user(self,user_id,slack_name, game_name):
         self.firebase.put('%s/users' % self.path,user_id, {'name': game_name, 'slack_name': slack_name})
 
@@ -162,14 +142,7 @@ class Game(object):
         self.firebase.delete(self.path,'dice')
 
     def take_die_from(self,die,from_user_id):
-        """ Take the specifed die from the user with the given id then persist the results.
->>> Game(MockFirebase({'game': {'users':{'12456': {'dice': [{'c':'black','n':1}], 'name': 'Test', 'slack_name': 'Foo'}}}}),'game').take_die_from(Die(params=['b1']),'12456')
-True
->>> Game(MockFirebase({'game': {'users':{'12456': {'dice': [{'c':'black','n':1}], 'name': 'Test', 'slack_name': 'Foo'}}}}),'game').take_die_from(Die(params=['b1']),'12456none')
-False
->>> Game(MockFirebase({'game': {'users':{'12456': {'dice': [{'c':'black','n':1}], 'name': 'Test', 'slack_name': 'Foo'}}}}),'game').take_die_from(Die(params=['w1']),'12456')
-False
-"""
+        """ Take the specifed die from the user with the given id then persist the results."""
         dice = self.get_user_dice(from_user_id)
         for i,d in enumerate(dice):
             if die.to_json() == d.to_json():
@@ -179,12 +152,8 @@ False
         return False
 
     def give_die_to(self,die,to_user_id):
-        """ Give the specified die to the specified user.
->>> Game(MockFirebase({'game': {'users':{'12456': {'dice': [], 'name': 'Test', 'slack_name': 'Foo'}}}}),'game').give_die_to(Die(params=['b1']),'12456')
-True
->>> Game(MockFirebase({'game': {'users':{'12456': {'dice': [], 'name': 'Test', 'slack_name': 'Foo'}}}}),'game').give_die_to(Die(params=['b1']),'12456none')
-False
-"""
+        """ Give the specified die to the specified user."""
         dice = self.get_user_dice(to_user_id) or []
         dice.append(die)
         self.set_user_dice(to_user_id,dice)
+        return True

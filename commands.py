@@ -4,7 +4,7 @@ import random
 import re
 import logging
 
-from utils import SlackResponse,InvalidDie,MockFirebase,Die,Game
+from game import SlackResponse,InvalidDie,MockFirebase,Die,Game
 
 def reset_game(game,params,user_id,user_name):
     """ Reset the game data """
@@ -25,6 +25,18 @@ def register(game,params,user_id,user_name):
     
     return SlackResponse('%s is now registered as %s' % (user_name,name),True)
 
+def unregister(game,params,user_id,user_name):
+    """ Unregister the current user or a named user """
+    if len(params):
+        unreg_name = ' '.join(params)
+        unreg_id = game.get_user_id_for_slack_name(unreg_name)
+    else:
+        unreg_name = user_name
+        unreg_id = user_id
+
+    game.unregister(unreg_id)
+    return SlackResponse("%s is longer registered" % unreg_name,True)
+
 def status(game,params,user_id,user_name):
     """ Send game status to channel """
     player_a = []
@@ -33,16 +45,16 @@ def status(game,params,user_id,user_name):
         player_a.append('No users registered')
     else:
         for uid,v in users.items():
-            player_a.append(u'%s (%s) %s' % (v['name'],v['slack_name'],format_dice_pool(game.get_user_dice(uid))))
+            player_a.append(u'%s (%s) %s' % (v['name'],v['slack_name'],game.format_dice_pool(game.get_user_dice(uid))))
     return SlackResponse("""%s
 
 %s""" % (u"\n".join(player_a),
-               format_dice_pool(game.dice)),True)
+               game.format_dice_pool(game.dice)),True)
 
-def claim(game,params,user_id,user_name):
-    """ Claim a specific die """
+def take(game,params,user_id,user_name):
+    """ Take a specific die from the pool """
     if len(params) < 1:
-        return SlackResponse("Usage: /fiasco claim color number")
+        return SlackResponse("Usage: /fiasco take color number")
     
     # Validate
     try:
@@ -59,7 +71,7 @@ def claim(game,params,user_id,user_name):
             game.dice = dice
             user_dice.append(die)
             game.set_user_dice(user_id,user_dice)
-            return SlackResponse ("%s claimed %s.\nPool: %s" % (user_name, die.to_emoji(),format_dice_pool(dice) or 'Empty'),True)
+            return SlackResponse ("%s claimed %s.\nPool: %s" % (user_name, die.to_emoji(),game.format_dice_pool(dice) or 'Empty'),True)
 
     return SlackResponse(u"Could not find a %s" % die)
 
@@ -81,7 +93,7 @@ def give(game,params,user_id,user_name):
     except InvalidDie:
         return SlackResponse('Format is w5 or white 5 (or b1 or black 1)')
     if not game.take_die_from(die,user_id):
-        return SlackResponse(u'%s does not have a %s' % (slack_name, die))
+        return SlackResponse(u'%s does not have a %s' % (user_name, die))
     game.give_die_to(die,to_player_id)
     return SlackResponse(u"%s gave %s to %s" % (user_name,die.to_emoji(),slack_name),True)
 
@@ -91,11 +103,12 @@ def roll(game,params,user_id,user_name):
     if not dice:
         return SlackResponse("You have no dice.")
     dx = sum([x.roll() for x in dice if x.color == 'white']) - sum([x.roll() for x in dice if x.color == 'black'])
+    rolled = game.format_dice_pool(dice)
     if dx > 0:
-        return SlackResponse("%s rolled white %d" % (user_name,dx))
+        return SlackResponse("%s rolled %s totalling white %d" % (user_name,rolled,dx))
     elif dx < 0:
-        return SlackResponse("%s rolled black %d" % (user_name,abs(dx)))
-    return SlackResponse("%s rolled 0." % (user_name,))   
+        return SlackResponse("%s rolled %s totalling black %d" % (user_name,rolled,abs(dx)))
+    return SlackResponse("%s rolled % totalling 0." % (user_name,rolled))   
 
 def pool(game,params,user_id,user_name):
     """ Output the dice pool. If "roll" is the first parameter, reroll. Should be two black and two white dice for each user """
@@ -115,17 +128,7 @@ def pool(game,params,user_id,user_name):
         for user_id in game.users.keys():
             game.set_user_dice(user_id,[])
  
-    return SlackResponse(format_dice_pool(dice) or "No dice in pool",True)
-
-def format_dice_pool(dice):
-    """ 
->>> format_dice_pool((Die(number=5,color='black'),Die(number=1,color='white'),Die(number=6,color='black')))
-u':d6-1: :d6-5-black: :d6-6-black:'
-    """
-    if not dice:
-        return ""
-    return u"%s %s"% (' '.join([x.to_emoji() for x in dice if x.color == 'white']),
-       ' '.join([x.to_emoji() for x in dice if x.color == 'black']))
+    return SlackResponse(game.format_dice_pool(dice) or "No dice in pool",True)
 
 def spend(game,params,user_id,user_name):
     """ Let a user spend one of their dice """
@@ -142,9 +145,4 @@ def spend(game,params,user_id,user_name):
             return SlackResponse("%s spent %s" % (user_name, die.to_emoji()),True)
        
     return SlackResponse("You don't have a %s" % die.to_emoji())
-
-
-if __name__ == "__main__":
-    import doctest
-    doctest.testmod()
 

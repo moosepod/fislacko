@@ -11,8 +11,9 @@ app.config.from_envvar('FISLACKO_SETTINGS')
 
 COMMAND_MAPPINGS = {'reset': commands.reset_game,
                     'register': commands.register,
+                    'unregister': commands.unregister,
                     'status': commands.status,
-                    'claim': commands.claim,
+                    'take': commands.take,
                     'give': commands.give,
                     'pool': commands.pool,
                     'roll': commands.roll,
@@ -52,8 +53,9 @@ def route(game_id,data,userid,username,firebase_url):
 reset [confirm]:  reset the game if "confirm" is passed as the parameter
 pool [roll]: show the current dice pool. if roll passed in as parameter, clear everyones dice and roll the dice for the pool
 register [name]: register your player name with the game
+unregister [name]: unregister yourself or the specified user
 status: output current status to channel
-claim [color number]: claim a die from the pool
+take [color number]: take a die from the pool
 give [color number] [user]: give a die to another player
 roll: roll all your dice and give the aggregate score
 spend: spend one your dice (so you no longer have it)"""}
