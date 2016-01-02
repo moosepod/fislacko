@@ -12,6 +12,11 @@ class MockFirebaseTests(unittest.TestCase):
         mf.put('foo','bar',{'quux': True})
         self.assertEquals({'foo': {'bar': {'quux': True}}},mf.data)
 
+    def test_delete(self):
+        mf = MockFirebase({'a': {'b':True}})
+        mf.delete('a','b')
+        self.assertEquals(mf.data, {'a': {}})
+
 class DieTests(unittest.TestCase):
     def test_default(self):
         self.assertEquals( u':d6-5:',Die(color='white',number=5).to_emoji())
@@ -49,16 +54,51 @@ class GameTests(unittest.TestCase):
     def test_get_user_id_for_slack_name(self):
         self.assertEquals(None,self.game.get_user_id_for_slack_name('foo'))
         self.assertEquals(u'12456', self.game.get_user_id_for_slack_name('bar'))
-
+        
     def test_take_die_from(self):
         self.game.set_user_dice('12456',[Die(params=['b1'])])
         self.assertTrue(self.game.take_die_from(Die(params=['b1']),'12456'))
         self.assertFalse(self.game.take_die_from(Die(params=['b1']),'12456none'))
         self.assertFalse(self.game.take_die_from(Die(params=['w1']),'12456'))
+        self.assertEquals({'game': {'users':{'12456': {'name': 'Test', 'slack_name': 'Bar', 'dice':[]}}}}, self.game.firebase.data)
 
     def test_give_die_to(self):
         self.assertTrue(self.game.give_die_to(Die(params=['b1']),'12456'))
+        self.assertEquals({'game': {'users':{'12456': {'dice':[{'c': 'black', 'n': 1}],'name': 'Test', 'slack_name': 'Bar'}}}}, self.game.firebase.data)
 
+    def test_get_user(self):
+        self.assertEquals({'name': 'Test', 'slack_name': 'Bar'}, self.game.get_user('12456'))
+        self.assertEquals({}, self.game.get_user('nosuchuser'))
+
+    def test_set_user(self):
+        self.assertEquals({}, self.game.get_user('abc'))
+        self.game.set_user('abc','Slack','Test')
+        self.assertEquals({'name': 'Test', 'slack_name': 'Slack'}, self.game.get_user('abc'))
+
+    def test_dice(self):
+        self.assertEquals([], self.game.dice)
+        self.game.dice = [Die(number=5,color='w')]
+        self.assertEquals([{'n': 5, 'c': 'white'}], [x.to_json() for x in self.game.dice])       
+
+    def test_users(self):
+        self.assertEquals({'12456': {'name': 'Test', 'slack_name': 'Bar'}}, self.game.users)
+
+    def test_unregister(self):
+        self.game.unregister('asdfsadf') # Test no error
+        self.game.unregister('12456')
+        self.assertEquals({}, self.game.users)
+
+    def test_user_dice(self):
+        self.assertEquals([], self.game.get_user_dice('12456'))
+        self.game.set_user_dice('12456', [Die(number=5,color='w')])
+        self.assertEquals([{'n': 5, 'c': 'white'}], [x.to_json() for x in self.game.get_user_dice('12456')])
+
+    def test_clear(self):
+        self.game.dice = [Die(number=5,color='w')]
+        self.game.set_user('abc','Slack','Test')
+        self.game.clear()
+        self.assertEquals({'game': {}}, self.game.firebase.data)
+    
 if __name__ == '__main__':
     unittest.main()
 

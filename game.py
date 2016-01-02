@@ -37,6 +37,17 @@ class MockFirebase(object):
             d = d[part]
         d[subpath] = data
 
+    def delete(self,path,subpath):
+        d = self.data
+        for part in path.split('/'):
+            d = d.get(part)
+            if not d:
+                return None
+        try:
+            del d[subpath]
+        except KeyError:
+            pass
+
     def __unicode__(self):
         return unicode(self.data)
 
