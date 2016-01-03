@@ -51,12 +51,12 @@ def route(game_id,data,userid,username,firebase_url):
                         params,userid,username).to_json()
     return {'text': u"""Usage: /slack command, where commands are:
 reset [confirm]:  reset the game if "confirm" is passed as the parameter
-pool [roll]: show the current dice pool. if roll passed in as parameter, clear everyones dice and roll the dice for the pool
+pool [reroll|setup]: show the current dice pool. if setup passed as a parameter, setup the initial pool. if reroll passed in, reroll all dice in the pool.
 register [name]: register your player name with the game
 unregister [name]: unregister yourself or the specified user
 status: output current status to channel
 take [color number]: take a die from the pool
-give [color number] [user]: give a die to another player
+give [color number] [user]: give a die to another player. use "pool" as player name to return to the pool. 
 roll: roll all your dice and give the aggregate score
 spend: spend one your dice (so you no longer have it)"""}
 

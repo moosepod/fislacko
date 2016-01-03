@@ -63,15 +63,11 @@ def take(game,params,user_id,user_name):
         return SlackResponse('Format is w5 or white 5 (or b1 or black 1')
     
     # Find die
-    dice = game.dice
     user_dice = game.get_user_dice(user_id) or []
-    for i,d in enumerate(dice):
-        if d.to_json() == die.to_json():
-            del dice[i]
-            game.dice = dice
-            user_dice.append(die)
-            game.set_user_dice(user_id,user_dice)
-            return SlackResponse ("%s claimed %s.\nPool: %s" % (user_name, die.to_emoji(),game.format_dice_pool(dice) or 'Empty'),True)
+    if game.take_die_from_pool(die):
+        user_dice.append(die)
+        game.set_user_dice(user_id,user_dice)
+        return SlackResponse ("%s claimed %s.\nPool: %s" % (user_name, die.to_emoji(),game.format_dice_pool(game.dice) or 'Empty'),True)
 
     return SlackResponse(u"Could not find a %s" % die)
 
@@ -85,7 +81,10 @@ def give(game,params,user_id,user_name):
 
     # Load up our user and desired die
     slack_name = params[-1].replace('@','') # Allow use of @
-    to_player_id = game.get_user_id_for_slack_name(slack_name)
+    if slack_name == 'pool':
+        to_player_id = 'pool'
+    else:
+        to_player_id = game.get_user_id_for_slack_name(slack_name)
     if not to_player_id:
         return SlackResponse('No player found with slack name "%s"' % slack_name)
     try:
@@ -94,7 +93,12 @@ def give(game,params,user_id,user_name):
         return SlackResponse('Format is w5 or white 5 (or b1 or black 1)')
     if not game.take_die_from(die,user_id):
         return SlackResponse(u'%s does not have a %s' % (user_name, die))
-    game.give_die_to(die,to_player_id)
+    if slack_name == 'pool':
+        dice = game.dice
+        dice.append(die)
+        game.dice = dice
+    else:
+        game.give_die_to(die,to_player_id)
     return SlackResponse(u"%s gave %s to %s" % (user_name,die.to_emoji(),slack_name),True)
 
 def roll(game,params,user_id,user_name):
@@ -105,16 +109,16 @@ def roll(game,params,user_id,user_name):
     dx = sum([x.roll() for x in dice if x.color == 'white']) - sum([x.roll() for x in dice if x.color == 'black'])
     rolled = game.format_dice_pool(dice)
     if dx > 0:
-        return SlackResponse("%s rolled %s totalling white %d" % (user_name,rolled,dx))
+        return SlackResponse("%s rolled %s totalling white %d" % (user_name,rolled,dx),True)
     elif dx < 0:
-        return SlackResponse("%s rolled %s totalling black %d" % (user_name,rolled,abs(dx)))
-    return SlackResponse("%s rolled % totalling 0." % (user_name,rolled))   
+        return SlackResponse("%s rolled %s totalling black %d" % (user_name,rolled,abs(dx)),True)
+    return SlackResponse("%s rolled %s totalling 0." % (user_name,rolled),True)   
 
 def pool(game,params,user_id,user_name):
-    """ Output the dice pool. If "roll" is the first parameter, reroll. Should be two black and two white dice for each user """
+    """ Output the dice pool. Based on parameters, optionally reset or reroll. """
     dice = game.dice
-    if params == ['roll']:
-        # Reroll dice
+    if params == ['reset']:
+        # Reset dice
         dice = []
         user_count = len(game.users)
         if not user_count:
@@ -123,10 +127,12 @@ def pool(game,params,user_id,user_name):
             for i in range((user_count*2)):
                 dice.append(Die(color=color,number=random.randint(1,6)))
         game.dice = dice
- 
-        # Clear dice for users
-        for user_id in game.users.keys():
-            game.set_user_dice(user_id,[])
+    elif params == ['reroll']:
+        # Reroll dice still in pool
+        dice = game.dice
+        for die in dice:
+            die.roll()
+        game.dice = dice
  
     return SlackResponse(game.format_dice_pool(dice) or "No dice in pool",True)
 

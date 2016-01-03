@@ -152,6 +152,16 @@ class Game(object):
         self.firebase.delete(self.path,'users')
         self.firebase.delete(self.path,'dice')
 
+    def take_die_from_pool(self,die):
+        """ Take the specified die from the pool and persist results. Return True if successful, False if die not in pool """
+        dice = self.dice
+        for i,d in enumerate(dice):
+            if d.to_json() == die.to_json():
+                del dice[i]
+                self.dice = dice
+                return True
+        return False
+
     def take_die_from(self,die,from_user_id):
         """ Take the specifed die from the user with the given id then persist the results."""
         dice = self.get_user_dice(from_user_id)
