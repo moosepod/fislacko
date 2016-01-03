@@ -1,6 +1,7 @@
 import random
 import re
 import logging
+import pymongo
 
 class SlackResponse(object):
     def __init__(self,text,in_channel=False):
@@ -16,9 +17,20 @@ class SlackResponse(object):
 class InvalidDie(Exception):
     pass
 
-class MockFirebase(object):
+class GameState(object):
     def __init__(self,data=None):
         self.data = data or {}
+
+    def save(self,game_id):
+        client = pymongo.MongoClient()
+        db = client.fislacko
+        self.data['_id'] = game_id
+        db.games.replace_one({'_id': game_id},self.data,upsert=True)
+        
+    def load(self,game_id):
+        client = pymongo.MongoClient()
+        db = client.fislacko
+        self.data = db.games.find_one({'_id': game_id}) or {}
 
     def get(self,path,subpath):
         d = self.data
@@ -100,9 +112,9 @@ class Die(object):
         return u'%s %s' % (self.color, self.number)
 
 class Game(object):
-    def __init__(self,firebase,path):
-        self.firebase = firebase
-        self.path = path
+    def __init__(self,game_state):
+        self.game_state = game_state
+        self.path = ''
 
     def format_dice_pool(self,dice):
         """ Take a list/tuple of dice and return them sorted into white and black dice, as emoji """
@@ -113,26 +125,26 @@ class Game(object):
 
     @property
     def dice(self):
-        return [Die(json=x) for x in self.firebase.get(self.path,'dice') or []]
+        return [Die(json=x) for x in self.game_state.get(self.path,'dice') or []]
 
     @dice.setter
     def dice(self,value):
-        self.firebase.put(self.path,'dice',[x.to_json() for x in value])
+        self.game_state.put(self.path,'dice',[x.to_json() for x in value])
 
     @property
     def setup(self):
-        return self.firebase.get(self.path,'setup') or []
+        return self.game_state.get(self.path,'setup') or []
 
     @setup.setter
     def setup(self,value):
-        self.firebase.put(self.path,'setup',value)
+        self.game_state.put(self.path,'setup',value)
 
     @property
     def users(self):
-        return self.firebase.get(self.path,'users') or {}
+        return self.game_state.get(self.path,'users') or {}
 
     def get_user(self,user_id):
-        return self.firebase.get('%s/users' % self.path, user_id) or {}
+        return self.game_state.get('%s/users' % self.path, user_id) or {}
 
     def get_user_id_for_slack_name(self,slack_name):
         """ Return the user with the given slack name, or None if no match. Case insensitive """
@@ -142,24 +154,24 @@ class Game(object):
         return None
 
     def unregister(self,user_id):
-        self.firebase.delete(u'%s/users' % (self.path,),user_id)
+        self.game_state.delete(u'%s/users' % (self.path,),user_id)
         
     def set_user(self,user_id,slack_name, game_name):
-        self.firebase.put('%s/users' % self.path,user_id, {'name': game_name, 'slack_name': slack_name})
+        self.game_state.put('%s/users' % self.path,user_id, {'name': game_name, 'slack_name': slack_name})
 
     def get_user_dice(self,user_id):
         """ Return all dice for a user """
-        return [Die(json=x) for x in self.firebase.get('%s/users/%s' % (self.path,user_id), 'dice') or []]
+        return [Die(json=x) for x in self.game_state.get('%s/users/%s' % (self.path,user_id), 'dice') or []]
 
     def set_user_dice(self,user_id,dice):
         """ Set the dice for a user. Dice should be a list/tuple of Die objects """
-        self.firebase.put('%s/users/%s' % (self.path,user_id), 'dice', [x.to_json() for x in dice])
+        self.game_state.put('%s/users/%s' % (self.path,user_id), 'dice', [x.to_json() for x in dice])
 
     def clear(self):
-        """ Clear this game on firebase """
-        self.firebase.delete(self.path,'users')
-        self.firebase.delete(self.path,'dice')
-        self.firebase.delete(self.path,'setup')
+        """ Clear this game on.game_state """
+        self.game_state.delete(self.path,'users')
+        self.game_state.delete(self.path,'dice')
+        self.game_state.delete(self.path,'setup')
 
     def take_die_from_pool(self,die):
         """ Take the specified die from the pool and persist results. Return True if successful, False if die not in pool """

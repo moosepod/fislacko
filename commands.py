@@ -4,7 +4,7 @@ import random
 import re
 import logging
 
-from game import SlackResponse,InvalidDie,MockFirebase,Die,Game
+from game import SlackResponse,InvalidDie,Die,Game
 
 def reset_game(game,params,user_id,user_name):
     """ Reset the game data """
@@ -61,7 +61,10 @@ def status(game,params,user_id,user_name):
         player_a.append('No users registered')
     else:
         for uid,v in users.items():
-            player_a.append(u'%s (%s) %s' % (v['name'],v['slack_name'],game.format_dice_pool(game.get_user_dice(uid))))
+            try:
+                player_a.append(u'%s (%s) %s' % (v['name'],v['slack_name'],game.format_dice_pool(game.get_user_dice(uid) or [])))
+            except Exception, e:
+                logging.error(e)
     return SlackResponse("""%s
 
 %s""" % (u"\n".join(player_a),

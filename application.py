@@ -2,8 +2,7 @@ import logging
 
 from flask import Flask,jsonify,request
 
-from firebase import firebase
-
+from game import GameState
 import commands
 
 app = Flask(__name__)
@@ -29,13 +28,13 @@ def router():
     game_id = request.form.get('channel_id')
 
     try:   
-        return jsonify(route(game_id,data,userid,username,app.config['FIREBASE_URL']))
+        return jsonify(route(game_id,data,userid,username))
     except Exception, e:
         logging.error(e)
         return jsonify({'text': 'Whoops! Error.'})
 
 # Broken out to assist in testing
-def route(game_id,data,userid,username,firebase_url):
+def route(game_id,data,userid,username):
     command = None
     params = []
     if data:
@@ -43,13 +42,13 @@ def route(game_id,data,userid,username,firebase_url):
         if len(data) > 1:
             params = data[1:]
     if command:
-        # Setup our firebase connection for the request
-        fb = firebase.FirebaseApplication(firebase_url,None)
-        game = fb.get('/games',game_id)  
-        if not game:
-            fb.put('/games',game_id,{'active': True})
-        return command(commands.Game(fb,'/games/%s' % game_id),
+        game_state = GameState()
+        game_state.load(game_id)
+        try:
+            return command(commands.Game(game_state),
                         params,userid,username).to_json()
+        finally:
+            game_state.save(game_id)
     return {'text': u"""Usage: /slack command, where commands are:
 reset [confirm]:  reset the game if "confirm" is passed as the parameter
 setup [add|remove]: display the current setup. If add is the parameter, add rest of text as setup text. If remove, remove the nth item.

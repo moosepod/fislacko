@@ -1,19 +1,19 @@
 import unittest
 
-from game import MockFirebase, Game, Die
+from game import GameState, Game, Die
 
-class MockFirebaseTests(unittest.TestCase):
+class GameStateTests(unittest.TestCase):
     def test_get(self):
-        mf = MockFirebase({'foo': {'bar': {'quux': True}}})
+        mf = GameState({'foo': {'bar': {'quux': True}}})
         self.assertEquals({'quux': True}, mf.get('foo','bar'))
 
     def test_put(self):
-        mf = MockFirebase({})
+        mf = GameState({})
         mf.put('foo','bar',{'quux': True})
         self.assertEquals({'foo': {'bar': {'quux': True}}},mf.data)
 
     def test_delete(self):
-        mf = MockFirebase({'a': {'b':True}})
+        mf = GameState({'a': {'b':True}})
         mf.delete('a','b')
         self.assertEquals(mf.data, {'a': {}})
 
@@ -46,13 +46,13 @@ class DieTests(unittest.TestCase):
 
 class GameTests(unittest.TestCase):
     def setUp(self):
-        self.game = Game(MockFirebase({'game': {'users':{'12456': {'name': 'Test', 'slack_name': 'Bar'}}}}),'game')
+        self.game = Game(GameState({'game': {'users':{'12456': {'name': 'Test', 'slack_name': 'Bar'}}}}),'game')
     
     def test_setup(self):
         self.assertEquals([], self.game.setup)
         setup = ['This is a test']
         self.game.setup = setup
-        self.assertEquals(['This is a test'], self.game.firebase.data['game']['setup'])
+        self.assertEquals(['This is a test'], self.game.game_state.data['game']['setup'])
 
     def test_take_die_from_pool(self):
         self.game.dice = [Die(number=1,color='b')]
@@ -71,11 +71,11 @@ class GameTests(unittest.TestCase):
         self.assertTrue(self.game.take_die_from(Die(params=['b1']),'12456'))
         self.assertFalse(self.game.take_die_from(Die(params=['b1']),'12456none'))
         self.assertFalse(self.game.take_die_from(Die(params=['w1']),'12456'))
-        self.assertEquals({'game': {'users':{'12456': {'name': 'Test', 'slack_name': 'Bar', 'dice':[]}}}}, self.game.firebase.data)
+        self.assertEquals({'game': {'users':{'12456': {'name': 'Test', 'slack_name': 'Bar', 'dice':[]}}}}, self.game.game_state.data)
 
     def test_give_die_to(self):
         self.assertTrue(self.game.give_die_to(Die(params=['b1']),'12456'))
-        self.assertEquals({'game': {'users':{'12456': {'dice':[{'c': 'black', 'n': 1}],'name': 'Test', 'slack_name': 'Bar'}}}}, self.game.firebase.data)
+        self.assertEquals({'game': {'users':{'12456': {'dice':[{'c': 'black', 'n': 1}],'name': 'Test', 'slack_name': 'Bar'}}}}, self.game.game_state.data)
 
     def test_get_user(self):
         self.assertEquals({'name': 'Test', 'slack_name': 'Bar'}, self.game.get_user('12456'))
@@ -108,7 +108,7 @@ class GameTests(unittest.TestCase):
         self.game.dice = [Die(number=5,color='w')]
         self.game.set_user('abc','Slack','Test')
         self.game.clear()
-        self.assertEquals({'game': {}}, self.game.firebase.data)
+        self.assertEquals({'game': {}}, self.game.game_state.data)
     
 if __name__ == '__main__':
     unittest.main()
