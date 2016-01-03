@@ -120,6 +120,14 @@ class Game(object):
         self.firebase.put(self.path,'dice',[x.to_json() for x in value])
 
     @property
+    def setup(self):
+        return self.firebase.get(self.path,'setup') or []
+
+    @setup.setter
+    def setup(self,value):
+        self.firebase.put(self.path,'setup',value)
+
+    @property
     def users(self):
         return self.firebase.get(self.path,'users') or {}
 
@@ -151,6 +159,7 @@ class Game(object):
         """ Clear this game on firebase """
         self.firebase.delete(self.path,'users')
         self.firebase.delete(self.path,'dice')
+        self.firebase.delete(self.path,'setup')
 
     def take_die_from_pool(self,die):
         """ Take the specified die from the pool and persist results. Return True if successful, False if die not in pool """

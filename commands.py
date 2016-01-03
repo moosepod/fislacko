@@ -14,6 +14,22 @@ def reset_game(game,params,user_id,user_name):
     
     return SlackResponse('To reset, pass in confirm as the parameter')   
 
+def setup(game,params,user_id,user_name):
+    setup = game.setup
+    if len(params) > 0:
+        if params[0] == 'add':
+            setup.append(' '.join(params[1:]))
+        elif params[0] in ('delete','remove','del'):
+            try:
+                del setup[int(params[1])]
+            except ValueError:
+                pass
+        game.setup = setup
+
+    if not len(setup):
+        return SlackResponse("Game has no setup.",True)
+    return SlackResponse('\n'.join(["%d) %s" % (i,v) for i,v in enumerate(setup)]),True)
+
 def register(game,params,user_id,user_name):
     """ Register the logged in user as a given character """
     # Take in name

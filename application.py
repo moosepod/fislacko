@@ -13,6 +13,7 @@ COMMAND_MAPPINGS = {'reset': commands.reset_game,
                     'register': commands.register,
                     'unregister': commands.unregister,
                     'status': commands.status,
+                    'setup': commands.setup,
                     'take': commands.take,
                     'give': commands.give,
                     'pool': commands.pool,
@@ -51,6 +52,7 @@ def route(game_id,data,userid,username,firebase_url):
                         params,userid,username).to_json()
     return {'text': u"""Usage: /slack command, where commands are:
 reset [confirm]:  reset the game if "confirm" is passed as the parameter
+setup [add|remove]: display the current setup. If add is the parameter, add rest of text as setup text. If remove, remove the nth item.
 pool [reroll|setup]: show the current dice pool. if setup passed as a parameter, setup the initial pool. if reroll passed in, reroll all dice in the pool.
 register [name]: register your player name with the game
 unregister [name]: unregister yourself or the specified user
