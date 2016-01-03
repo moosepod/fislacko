@@ -48,6 +48,17 @@ class GameTests(unittest.TestCase):
     def setUp(self):
         self.game = Game(MockFirebase({'game': {'users':{'12456': {'name': 'Test', 'slack_name': 'Bar'}}}}),'game')
     
+    def test_setup(self):
+        self.assertEquals([], self.game.setup)
+        setup = ['This is a test']
+        self.game.setup = setup
+        self.assertEquals(['This is a test'], self.game.firebase.data['game']['setup'])
+
+    def test_take_die_from_pool(self):
+        self.game.dice = [Die(number=1,color='b')]
+        self.game.take_die_from_pool(Die(number=1,color='b'))
+        self.assertEquals([], self.game.dice)
+
     def test_format_dice_pool(self):
         self.assertEquals(u':d6-1: :d6-5-black: :d6-6-black:',  self.game.format_dice_pool((Die(number=5,color='black'),Die(number=1,color='white'),Die(number=6,color='black'))))
 
