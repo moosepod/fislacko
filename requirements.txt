@@ -1,6 +1,6 @@
 Flask==2.2.5
 Flask-RESTful==0.3.5
-Jinja2==2.10.1
+Jinja2==2.11.3
 MarkupSafe==0.23
 werkzeug>=0.15.5
 aniso8601==1.1.0
